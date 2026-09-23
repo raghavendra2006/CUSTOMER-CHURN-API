@@ -150,12 +150,12 @@ The model uses a unified `sklearn.pipeline.Pipeline` with a `ColumnTransformer`:
 
 | Metric | Score |
 |---|---|
-| **Accuracy** | ~0.79 |
-| **Precision** | ~0.64 |
-| **Recall** | ~0.48 |
-| **F1-Score** | ~0.55 |
+| **Accuracy** | 0.7864 |
+| **Precision** | 0.6254 |
+| **Recall** | 0.4866 |
+| **F1-Score** | 0.5474 |
 
-> **Note:** Exact metrics are printed when you run `python train.py`. The values above are representative. For churn prediction, **Recall** is critical — capturing as many at-risk customers as possible — while **Precision** ensures retention resources aren't wasted on loyal customers.
+> **Note:** For churn prediction, **Recall** is critical — capturing as many at-risk customers as possible — while **Precision** ensures retention resources aren't wasted on loyal customers. Metrics are reproducible with `random_state=42`.
 
 ### Data Cleaning
 
