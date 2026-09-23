@@ -8,6 +8,8 @@ Exposes:
 """
 
 import traceback
+from contextlib import asynccontextmanager
+
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -77,6 +79,23 @@ class CustomerData(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Lifespan — loads model at startup
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(application):
+    """Load the ML pipeline into memory when the application starts."""
+    try:
+        application.state.pipeline = load_pipeline()
+        print("✅ Model pipeline loaded successfully.")
+    except FileNotFoundError as e:
+        application.state.pipeline = None
+        print(f"⚠️  Warning: {e}")
+        print("   The /predict endpoint will return 500 until the model is available.")
+    yield
+
+
+# ---------------------------------------------------------------------------
 # FastAPI App Initialization
 # ---------------------------------------------------------------------------
 
@@ -87,23 +106,9 @@ app = FastAPI(
         "scikit-learn RandomForest pipeline. Send customer data to the "
         "/predict endpoint and receive a churn prediction with probability."
     ),
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
-
-# Load the model pipeline once at startup — NOT on every request
-pipeline = None
-
-
-@app.on_event("startup")
-def startup_event():
-    """Load the ML pipeline into memory when the application starts."""
-    global pipeline
-    try:
-        pipeline = load_pipeline()
-        print("✅ Model pipeline loaded successfully.")
-    except FileNotFoundError as e:
-        print(f"⚠️  Warning: {e}")
-        print("   The /predict endpoint will return 500 until the model is available.")
 
 
 # ---------------------------------------------------------------------------
@@ -131,8 +136,15 @@ def root():
 
 
 @app.get("/health", tags=["Health"])
-def health_check():
+def health_check(request: Request):
     """Extended health check — confirms the model is loaded and ready."""
+    pipeline = getattr(request.app.state, 'pipeline', None)
+    if pipeline is None:
+        try:
+            pipeline = load_pipeline()
+            request.app.state.pipeline = pipeline
+        except FileNotFoundError:
+            pass
     model_loaded = pipeline is not None
     return {
         "status": "healthy" if model_loaded else "degraded",
@@ -141,7 +153,7 @@ def health_check():
 
 
 @app.post("/predict", tags=["Prediction"])
-def predict_churn(data: CustomerData):
+def predict_churn(data: CustomerData, request: Request):
     """
     Predict whether a customer will churn.
 
@@ -154,6 +166,14 @@ def predict_churn(data: CustomerData):
         - prediction: "Yes" or "No"
         - probability: float between 0 and 1 (probability of churn)
     """
+    pipeline = getattr(request.app.state, 'pipeline', None)
+    if pipeline is None:
+        try:
+            pipeline = load_pipeline()
+            request.app.state.pipeline = pipeline
+        except FileNotFoundError:
+            pass
+
     # Ensure model is loaded
     if pipeline is None:
         raise HTTPException(
